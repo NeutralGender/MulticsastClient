@@ -1,0 +1,37 @@
+try
+    {
+        std::cout << this->aes_key.data() << " -> " << this->aes_key.size() << std::endl;
+        std::cout << this->AES_IV.data() << " -> " << this->AES_IV.size() << std::endl;
+
+        int valid = 0;
+        std::string recv;
+        recv.resize(384);
+
+        if( ( valid = read( receive->sockfd,
+                            &recv[0],
+                            384
+                          ) ) < 0 
+          )
+            throw std::runtime_error("Cannot Read Socket");
+
+            std::cout << "Receive: " << recv.data() << " :: " << recv.size() << std::endl;
+        
+
+        std::string plain;
+        AES->Decrypt( this->aes_key, this->AES_IV,
+                      std::string{ recv.begin(), recv.end() },
+                      plain
+                    );
+
+        std::cout << "Plain: " << plain << " -> " << plain.size() << std::endl;
+
+        std::stringstream st(plain);
+        boost::archive::text_iarchive ia(st);
+        ia >> key_value;
+
+        std::cout << "ValidR: " << valid << std::endl;
+    }
+    catch(const std::runtime_error& r)
+    {
+        std::cerr << r.what() << ": " << errno << '\n';
+    }
