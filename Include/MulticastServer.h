@@ -11,14 +11,11 @@
 #include <map>
 #include <array>
 #include <vector>
+#include <regex>
 
 #include <boost/serialization/map.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/binary_object.hpp>
-
-#include <boost/archive/binary_iarchive.hpp>
-#include <boost/archive/binary_oarchive.hpp>
 
 #include "DBDriver/DBDriver.h"
 

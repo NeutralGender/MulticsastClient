@@ -2,7 +2,7 @@
 #define _SEND_CLIENT
 
 #include "SendSocket.h"
-#include "../../MulticastServer.h"
+#include "../MulticastServer.h"
 
 #include <string>
 

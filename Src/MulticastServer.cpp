@@ -37,9 +37,6 @@ void MulticastServer::Authentification( SendClient* socketClient,
     std::string Alice_public_key; // Key is encoded in Base64
     Alice.SavingPublicKeyToString(Alice_public_key);
 
-    std::cout << "Alice_public_key: ";
-    std::cout << Alice_public_key << std::endl;
-
     sleep(1);
 
     n = write( socketClient->socketfd, Alice_public_key.data(), Alice_public_key.size() );
@@ -52,7 +49,7 @@ void MulticastServer::Authentification( SendClient* socketClient,
     recv_message.resize(768);
 
     n = read ( socketClient->socketfd, &recv_message[0], 768 );
-    std::cout << "Recv_message AES_KEY: " << recv_message.data() << std::endl;
+    //std::cout << "Recv_message AES_KEY: " << recv_message.data() << std::endl;
     std::vector<byte> AES_KEY(Bob.Verify( Alice.Decrypt(recv_message) ) );
 // End Receive Encrypted by Alice public and Signed by Bob private Key from Bob
 
@@ -68,7 +65,7 @@ void MulticastServer::Authentification( SendClient* socketClient,
 
     n = read ( socketClient->socketfd, &recv_message[0], 768 );
     this->AES_Ticket = (Bob.Verify( Alice.Decrypt(recv_message) ) );
-    std::cout << "Ticket: " << this->AES_Ticket.data() << std::endl << this->AES_Ticket.size() << std::endl;
+    //std::cout << "Ticket: " << this->AES_Ticket.data() << std::endl << this->AES_Ticket.size() << std::endl;
 // End Receive Encrypted Signed Ticket by private key from Bob
 
 // Calculate Digest: SHA3_256( AES_Ticket + password );
@@ -77,8 +74,6 @@ void MulticastServer::Authentification( SendClient* socketClient,
     sha->AddDataToSHA3object(std::string{AES_Ticket.begin(), AES_Ticket.end()}+"I am Client");
     sha->SetDigestStringSHAsize(digest);
     sha->CalculateDigest(digest);
-    
-    std::cout << "Digest: " << digest << " : " << digest.size() << std::endl;
 // End Calculate Digest: SHA3_256( AES_Ticket + password );
 
 // Encrypt Hash3_256 by Ephemere Key Received from Bob and Send it to him
@@ -86,33 +81,32 @@ void MulticastServer::Authentification( SendClient* socketClient,
     //AesModeCBC AES(CryptoPP::AES::DEFAULT_KEYLENGTH, CryptoPP::AES::BLOCKSIZE);
     AES->Encrypt( AES_KEY, AES_IV, digest, aes_cipher );
 
-    std::cout << aes_cipher << " : " << aes_cipher.size() << std::endl;
     sleep(1);
 
     n = write( socketClient->socketfd, aes_cipher.data(), aes_cipher.size() );
 // End Encrypt Hash3_256 by Ephemere Key Received from Bob
 
 // Receive AES Permanent Key form Bob
-    recv_message.resize(64);
-    std::cout << recv_message.size() << std::endl;
-    read( socketClient->socketfd, &recv_message[0], 64 );
+    sleep(1);
 
-    std::cout << "PermanentKey: " << recv_message << std::endl;
+    recv_message.resize(32);
+    read( socketClient->socketfd, &recv_message[0], 32 );
+
     AES->Decrypt( AES_KEY, AES_IV, recv_message, this->aes_key );
 
+    std::cout << "AES_KEY: ";
     std::cout << this->aes_key.data() << std::endl;
 // END Receive AES Permanent Key form Bob
 
 // Receive AES Permanent IV from Bob
-    recv_message.resize(64);
-    std::cout << "IV RECV: " << std::endl;
-    std::cout << recv_message.size() << std::endl;
-    read( socketClient->socketfd, &recv_message[0], 64 );
+    recv_message.resize(32);
+    read( socketClient->socketfd, &recv_message[0], 32 );
 
-    std::cout << "PermanentIV: " << recv_message << std::endl;
     AES->Decrypt( AES_KEY, AES_IV, recv_message, this->AES_IV );
 
-    std::cout << this->AES_IV.data() << std::endl;
+    std::cout << "AES_IV: ";
+    std::cout << this->AES_IV.data();
+    std::cout << std::endl;
 // End Receive AES Permanent IV from Bob
 
 }
@@ -121,48 +115,107 @@ void MulticastServer::ReceiveMsg( ReceiveSocketMulticast* receive,
                                   AesModeCBC* AES
                                 )
 {
+    std::string recv; // string for all received packages
+    std::string encod; // string for decrypted packages, which cat to plain
+    std::string plain; // result string with all packages
+
+    int count_receive = 0;
     try
     {
-        std::string recv;
-        std::string encod;
-        std::string plain;
-        recv.resize(512);
-    
-        int len;
-        int n = read( receive->sockfd, &len, sizeof(len) );
-        std::cout << "Len->" << len << std::endl;
+        recv.resize(528); // set sizeof string correctly for removing padding
+                          // from encrypted packages
 
-        //setsockopt( receive->sockfd, SOL_SOCKET, SO_RCVBUF, &len, sizeof(len) );
+/*
+        //int len;
+        //int n = read( receive->sockfd, &len, sizeof(len) );
+        //std::cout << "Len->" << len << std::endl;
+*/
 
-        size_t count_receive = 0;
-        while( len > 0 &&
+        // init len for recvfrom udp function, sizeof our sockaddr_in struct
+        socklen_t len = sizeof( receive->local );
+
+        // now we receive encrypted string with size of 512 => 528 bytes
+        // and if last string less than 528, we will receive by another way with resizing
+        while( (count_receive = recvfrom( receive->sockfd,
+                                          (void*)recv.data(),
+                                          528,
+                                          0,
+                                          (struct sockaddr*)&receive->local,
+                                          &len
+                                        )
+               ) >= 528
+            )
+        {
+            // decrypt package( any packages are full, 
+            // means than all of them could be decrypted independently )
+            AES->Decrypt( this->aes_key, this->AES_IV,
+                          recv,
+                          encod
+                        );
+
+            // move decrypted package to std::string which contains all decrypted
+            // packages for desirialization to std::map
+            plain += std::move( encod );
+        }
+
+        // resize received std::string for removing padding correctly
+        encod.resize(count_receive);
+        AES->Decrypt( this->aes_key, this->AES_IV,
+                      recv,
+                      encod
+                    );
+
+        plain += std::move( encod );
+
+        // deserialization all message from Multicast Server, so we
+        // received all and can write it to Redis DB
+        std::stringstream st(plain);
+        boost::archive::text_iarchive ia(st);
+        ia >> key_value;
+
+
+        std::cout << "Exit;" << std::endl;
+
+/*
+        //size_t count_receive = 0;
+        while(
+                len > 00 &&
                 (count_receive = read(  
                                         receive->sockfd,
                                         (void*)recv.data(),
                                         512
                                     ) > 0 )
+                                    
             )
         {
             len -= 512;
-            encod += recv;
+            encod += recv.data();
+            std::cout << recv.data() << std::endl;
         }
 
         std::cout << "Encod: " << encod.size() << std::endl;
 
+        
         AES->Decrypt( this->aes_key, this->AES_IV,
                       encod,
                       plain
                     );
 
         std::cout << plain << std::endl;
-
+        std::cin.get();
         std::stringstream st(plain);
+        
         boost::archive::text_iarchive ia(st);
         ia >> key_value;
+*/  
+        
     }
     catch(const std::exception& e)
     {
         std::cerr << e.what() << " :" << errno << '\n';
+        std::cout << "Plain: " << plain.size() << std::endl;
+        std::cout << "Count_receive : " << count_receive << std::endl;
+        //std::cout << "Sizeof : " << sizeof(encod.data()) << std::endl;
     }
     
 }

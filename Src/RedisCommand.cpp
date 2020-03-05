@@ -29,9 +29,9 @@ void RedisCommand::PipelineWrite( RedisConnection* rconnection,
                                               it->first.first.c_str(),  
                                                 (size_t) strlen (it->first.first.data()),
                                              it->first.second.data(), 
-                                                (size_t) sizeof (it->first.second.data()),
+                                                (size_t) strlen (it->first.second.data()),
                                              it->second.data(),       
-                                                (size_t) sizeof (it->second.data())
+                                                (size_t) strlen (it->second.data())
                                             )
                         );
                       
