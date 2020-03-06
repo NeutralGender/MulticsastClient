@@ -83,19 +83,19 @@ void AesModeCBC::Decrypt( const std::vector<byte>& key,
 {
     try
     {
-        bzero(&plaintext, sizeof(plaintext));
+        //bzero(&plaintext, sizeof(plaintext));
 
         CBC_Mode<AES>::Decryption d;
         d.SetKeyWithIV( key.data(), key.size(), iv.data() );
 
         
         StringSource ss(encoded,
-                        true,
-                        new StreamTransformationFilter // removing padding as required
-                        (                             //  CBC must be padded
-                            d,
-                            new CryptoPP::StringSink(plaintext)
-                        )
+                            true,
+                            new StreamTransformationFilter // removing padding as required
+                            (                             //  CBC must be padded
+                                d,
+                                new CryptoPP::StringSink( plaintext )
+                            )
                         );
         
 /*
@@ -117,6 +117,7 @@ void AesModeCBC::Decrypt( const std::vector<byte>& key,
     catch(const CryptoPP::Exception& e)
     {
         std::cerr << e.what() << '\n';
+        std::cout << encoded.size() << std::endl;
     }
     
     

@@ -115,66 +115,55 @@ void MulticastServer::ReceiveMsg( ReceiveSocketMulticast* receive,
                                   AesModeCBC* AES
                                 )
 {
+
+    std::map<std::pair<std::string,std::string>,std::string> src;
+
     std::string recv; // string for all received packages
     std::string encod; // string for decrypted packages, which cat to plain
     std::string plain; // result string with all packages
 
     int count_receive = 0;
+    socklen_t len = sizeof(receive->local);
     try
     {
-        recv.resize(528); // set sizeof string correctly for removing padding
-                          // from encrypted packages
+        recv.resize( 65'535 );
 
-/*
-        //int len;
-        //int n = read( receive->sockfd, &len, sizeof(len) );
-        //std::cout << "Len->" << len << std::endl;
-*/
-
-        // init len for recvfrom udp function, sizeof our sockaddr_in struct
-        socklen_t len = sizeof( receive->local );
-
-        // now we receive encrypted string with size of 512 => 528 bytes
-        // and if last string less than 528, we will receive by another way with resizing
-        while( (count_receive = recvfrom( receive->sockfd,
-                                          (void*)recv.data(),
-                                          528,
-                                          0,
-                                          (struct sockaddr*)&receive->local,
-                                          &len
-                                        )
-               ) >= 528
-            )
+        // Receive
+        while( ( count_receive = recvfrom( receive->sockfd,
+                                           &recv[0],
+                                           65'535,
+                                           0,
+                                           (struct  sockaddr*)&receive->local,
+                                           &len
+                                        ) 
+                ) > 1 
+             )
         {
-            // decrypt package( any packages are full, 
-            // means than all of them could be decrypted independently )
+            
+            recv.resize( count_receive );
+
+        // Decrypt
             AES->Decrypt( this->aes_key, this->AES_IV,
-                          recv,
-                          encod
+                          recv, encod
                         );
 
-            // move decrypted package to std::string which contains all decrypted
-            // packages for desirialization to std::map
-            plain += std::move( encod );
+            plain = std::move( encod );
+
+        // Deserialization
+            std::stringstream st(plain);
+            boost::archive::text_iarchive ia(st);
+            ia >> src;
+
+        // Mix Data
+            key_value.insert( src.begin(), src.end() );
+
+            recv.resize( 65'535 );
+            src.clear();
+            plain.clear();
         }
 
-        // resize received std::string for removing padding correctly
-        encod.resize(count_receive);
-        AES->Decrypt( this->aes_key, this->AES_IV,
-                      recv,
-                      encod
-                    );
-
-        plain += std::move( encod );
-
-        // deserialization all message from Multicast Server, so we
-        // received all and can write it to Redis DB
-        std::stringstream st(plain);
-        boost::archive::text_iarchive ia(st);
-        ia >> key_value;
-
-
-        std::cout << "Exit;" << std::endl;
+        std::cout << key_value.size() << std::endl;
+        std::cout << "Exit!" << std::endl;
 
 /*
         //size_t count_receive = 0;
